@@ -4,39 +4,53 @@ import joblib
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 import seaborn as sns
+import re
+import string
 
-# Load model dan vectorizer
+# === Load Model dan Vectorizer ===
 kmeans_model = joblib.load("UkulelebyYousician_clustering.pkl")
 tfidf_vectorizer = joblib.load("UkulelebyYousician_tfidf_vectorizer.pkl")
 
-st.set_page_config(page_title="Clustering Review - Ukulele by Yousician", layout="wide")
+st.set_page_config(page_title="Topic Clustering - Ukulele by Yousician", layout="wide")
+st.title("Topic Clustering - Ukulele by Yousician")
 
-st.title("Clustering Review - Ukulele by Yousician")
+# === Fungsi Pembersihan Review ===
+def clean_text(text):
+    text = str(text).lower()
+    text = re.sub(r'<.*?>', ' ', text)
+    text = re.sub(r'http\S+|www.\S+', ' ', text)
+    text = re.sub(r'[^a-z\s]', ' ', text)
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
 
-# Input mode
-mode = st.radio("Pilih metode input:", ["📝 Input Manual", "📁 Upload CSV"])
-
-# Fungsi untuk prediksi cluster
 def predict_cluster(texts):
     X = tfidf_vectorizer.transform(texts)
-    cluster_labels = kmeans_model.predict(X)
-
-    # PCA untuk visualisasi
+    clusters = kmeans_model.predict(X)
     pca = PCA(n_components=2)
     X_pca = pca.fit_transform(X.toarray())
+    return clusters, X_pca
 
-    return cluster_labels, X_pca
+# === MODE 1: INPUT MANUAL ===
+mode = st.radio("Pilih metode input:", ["📝 Input Manual", "📁 Upload CSV"])
 
-# Mode 1: Manual
 if mode == "📝 Input Manual":
-    user_input = st.text_area("Masukkan review (1 atau lebih):", height=200)
+    name = st.text_input("Nama Pengguna:")
+    star_rating = st.selectbox("Rating Bintang:", [1, 2, 3, 4, 5])
+    date = st.date_input("Tanggal Ulasan:")
+    review = st.text_area("Tulis Review di sini:")
+
     if st.button("Prediksi Cluster"):
-        texts = [t.strip() for t in user_input.strip().split("\n") if t.strip()]
-        if texts:
-            clusters, pca_result = predict_cluster(texts)
+        if review.strip() == "":
+            st.warning("Review tidak boleh kosong.")
+        else:
+            cleaned = clean_text(review)
+            cluster, pca_result = predict_cluster([cleaned])
             df_result = pd.DataFrame({
-                "Review": texts,
-                "Cluster": clusters,
+                "Name": [name],
+                "Star Rating": [star_rating],
+                "Date": [date],
+                "Review": [review],
+                "Cluster": cluster,
                 "PCA 1": pca_result[:, 0],
                 "PCA 2": pca_result[:, 1]
             })
@@ -45,31 +59,36 @@ if mode == "📝 Input Manual":
             # Visualisasi
             st.subheader("Visualisasi PCA")
             fig, ax = plt.subplots()
-            sns.scatterplot(data=df_result, x='PCA 1', y='PCA 2', hue='Cluster', palette='Set2', s=80, ax=ax)
+            sns.scatterplot(data=df_result, x='PCA 1', y='PCA 2', hue='Cluster', palette='Set2', s=100, ax=ax)
             st.pyplot(fig)
-        else:
-            st.warning("Masukkan minimal satu review.")
 
-# Mode 2: Upload CSV
+# === MODE 2: UPLOAD CSV ===
 else:
-    uploaded_file = st.file_uploader("Upload file CSV dengan kolom 'clean_review':", type='csv')
-    if uploaded_file:
-        df = pd.read_csv(uploaded_file)
-        if 'clean_review' not in df.columns:
-            st.error("Kolom 'clean_review' tidak ditemukan dalam file.")
+    file = st.file_uploader("Upload file CSV dengan kolom: name, star_rating, date, review", type="csv")
+    if file:
+        df = pd.read_csv(file)
+
+        required_cols = {'name', 'star_rating', 'date', 'review'}
+        if not required_cols.issubset(df.columns):
+            st.error(f"File harus memiliki kolom: {', '.join(required_cols)}")
         else:
-            clusters, pca_result = predict_cluster(df['clean_review'].fillna(""))
+            df['cleaned_review'] = df['review'].fillna("").apply(clean_text)
+            clusters, pca_result = predict_cluster(df['cleaned_review'])
             df['Cluster'] = clusters
             df['PCA 1'] = pca_result[:, 0]
             df['PCA 2'] = pca_result[:, 1]
-            st.dataframe(df[['clean_review', 'Cluster']])
 
-            # Visualisasi
+            st.dataframe(df[['name', 'star_rating', 'date', 'review', 'Cluster']])
+
             st.subheader("Visualisasi PCA")
             fig, ax = plt.subplots()
             sns.scatterplot(data=df, x='PCA 1', y='PCA 2', hue='Cluster', palette='Set2', s=70, ax=ax)
             st.pyplot(fig)
 
             # Unduh hasil
-            csv = df.to_csv(index=False)
-            st.download_button("📥 Unduh Hasil", csv, "hasil_klaster.csv", "text/csv")
+            st.download_button(
+                label="📥 Unduh Hasil Klaster",
+                data=df.to_csv(index=False),
+                file_name="hasil_klaster_yousician.csv",
+                mime="text/csv"
+            )

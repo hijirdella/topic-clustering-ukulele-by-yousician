@@ -23,11 +23,18 @@ def clean_text(text):
     text = re.sub(r'\s+', ' ', text).strip()
     return text
 
+# === Fungsi Prediksi Cluster ===
 def predict_cluster(texts):
     X = tfidf_vectorizer.transform(texts)
     clusters = kmeans_model.predict(X)
-    pca = PCA(n_components=2)
-    X_pca = pca.fit_transform(X.toarray())
+
+    if X.shape[0] >= 2:
+        pca = PCA(n_components=2)
+        X_pca = pca.fit_transform(X.toarray())
+    else:
+        # fallback 1 titik jika input hanya satu review
+        X_pca = [[0.0, 0.0]]
+
     return clusters, X_pca
 
 # === MODE 1: INPUT MANUAL ===
@@ -51,12 +58,11 @@ if mode == "📝 Input Manual":
                 "Date": [date],
                 "Review": [review],
                 "Cluster": cluster,
-                "PCA 1": pca_result[:, 0],
-                "PCA 2": pca_result[:, 1]
+                "PCA 1": pca_result[0][0],
+                "PCA 2": pca_result[0][1]
             })
             st.dataframe(df_result)
 
-            # Visualisasi
             st.subheader("Visualisasi PCA")
             fig, ax = plt.subplots()
             sns.scatterplot(data=df_result, x='PCA 1', y='PCA 2', hue='Cluster', palette='Set2', s=100, ax=ax)
@@ -75,8 +81,8 @@ else:
             df['cleaned_review'] = df['review'].fillna("").apply(clean_text)
             clusters, pca_result = predict_cluster(df['cleaned_review'])
             df['Cluster'] = clusters
-            df['PCA 1'] = pca_result[:, 0]
-            df['PCA 2'] = pca_result[:, 1]
+            df['PCA 1'] = [x[0] for x in pca_result]
+            df['PCA 2'] = [x[1] for x in pca_result]
 
             st.dataframe(df[['name', 'star_rating', 'date', 'review', 'Cluster']])
 
@@ -85,7 +91,6 @@ else:
             sns.scatterplot(data=df, x='PCA 1', y='PCA 2', hue='Cluster', palette='Set2', s=70, ax=ax)
             st.pyplot(fig)
 
-            # Unduh hasil
             st.download_button(
                 label="📥 Unduh Hasil Klaster",
                 data=df.to_csv(index=False),

@@ -5,14 +5,17 @@ from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 import seaborn as sns
 import re
-import string
+from datetime import datetime, time
 
 # === Load Model dan Vectorizer ===
 kmeans_model = joblib.load("UkulelebyYousician_clustering.pkl")
 tfidf_vectorizer = joblib.load("UkulelebyYousician_tfidf_vectorizer.pkl")
 
+# === Set Halaman ===
 st.set_page_config(page_title="Topic Clustering - Ukulele by Yousician", layout="wide")
-st.title("Topic Clustering - Ukulele by Yousician")
+
+# === Judul Aplikasi dengan Emoji Musik Netral 🎶 ===
+st.title("🎶 Topic Clustering - Ukulele by Yousician")
 
 # === Fungsi Pembersihan Review ===
 def clean_text(text):
@@ -32,30 +35,34 @@ def predict_cluster(texts):
         pca = PCA(n_components=2)
         X_pca = pca.fit_transform(X.toarray())
     else:
-        # fallback 1 titik jika input hanya satu review
         X_pca = [[0.0, 0.0]]
 
     return clusters, X_pca
 
-# === MODE 1: INPUT MANUAL ===
+# === Pilihan Mode Input ===
 mode = st.radio("Pilih metode input:", ["📝 Input Manual", "📁 Upload CSV"])
 
+# === MODE 1: INPUT MANUAL ===
 if mode == "📝 Input Manual":
     name = st.text_input("Nama Pengguna:")
     star_rating = st.selectbox("Rating Bintang:", [1, 2, 3, 4, 5])
     date = st.date_input("Tanggal Ulasan:")
+    waktu = st.time_input("Jam Ulasan (WIB):", value=time(12, 0))
     review = st.text_area("Tulis Review di sini:")
 
     if st.button("Prediksi Cluster"):
         if review.strip() == "":
             st.warning("Review tidak boleh kosong.")
         else:
+            dt_combined = datetime.combine(date, waktu)
+            dt_formatted = dt_combined.strftime("%Y-%m-%d %H:%M WIB")
+
             cleaned = clean_text(review)
             cluster, pca_result = predict_cluster([cleaned])
             df_result = pd.DataFrame({
                 "Name": [name],
                 "Star Rating": [star_rating],
-                "Date": [date],
+                "Datetime (WIB)": [dt_formatted],
                 "Review": [review],
                 "Cluster": cluster,
                 "PCA 1": pca_result[0][0],

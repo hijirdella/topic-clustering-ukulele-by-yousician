@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import re
 from datetime import datetime, time
+import pytz
 
 # === Load Model dan Vectorizer ===
 kmeans_model = joblib.load("UkulelebyYousician_clustering.pkl")
@@ -46,23 +47,29 @@ mode = st.radio("Pilih metode input:", ["📝 Input Manual", "📁 Upload CSV"])
 if mode == "📝 Input Manual":
     name = st.text_input("Nama Pengguna:")
     star_rating = st.selectbox("Rating Bintang:", [1, 2, 3, 4, 5])
-    date = st.date_input("Tanggal Ulasan:")
-    waktu = st.time_input("Jam Ulasan (WIB):", value=time(12, 0))
+
+    wib = pytz.timezone("Asia/Jakarta")
+    now_wib = datetime.now(wib)
+
+    review_day = st.date_input("📅 Tanggal Ulasan:", value=now_wib.date())
+    review_time = st.time_input("⏰ Waktu Ulasan:", value=now_wib.time())
+
+    review_datetime = datetime.combine(review_day, review_time)
+    review_datetime_wib = wib.localize(review_datetime)
+    review_date_str = review_datetime_wib.strftime("%Y-%m-%d %H:%M")
+
     review = st.text_area("Tulis Review di sini:")
 
     if st.button("Prediksi Cluster"):
         if review.strip() == "":
             st.warning("Review tidak boleh kosong.")
         else:
-            dt_combined = datetime.combine(date, waktu)
-            dt_formatted = dt_combined.strftime("%Y-%m-%d %H:%M WIB")
-
             cleaned = clean_text(review)
             cluster, pca_result = predict_cluster([cleaned])
             df_result = pd.DataFrame({
                 "Name": [name],
                 "Star Rating": [star_rating],
-                "Datetime (WIB)": [dt_formatted],
+                "Datetime (WIB)": [review_date_str],
                 "Review": [review],
                 "Cluster": cluster,
                 "PCA 1": pca_result[0][0],
